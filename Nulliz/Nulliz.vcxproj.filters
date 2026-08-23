@@ -1,0 +1,150 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Source Files\Shaders">
+      <UniqueIdentifier>{ec14e44a-dd2d-45e0-8e94-84400c644dc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Shaders\Main">
+      <UniqueIdentifier>{1369d801-ea2d-4507-a892-c0076ce4bab3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\Textures">
+      <UniqueIdentifier>{e86c4d33-aefe-45bc-93c1-cab4da5d8adc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Shaders\Post Processing">
+      <UniqueIdentifier>{9baddebd-c704-400d-bc98-c039ce691ece}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\Textures\Cubemap">
+      <UniqueIdentifier>{942485b7-fd2d-4f14-800f-85a4c2ed82fd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\Textures\ObjectTextures">
+      <UniqueIdentifier>{609c74ce-7ce4-4821-ab12-dea0568625cb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Shaders\Skybox">
+      <UniqueIdentifier>{ceceb49e-ba69-4b75-a49a-de8380b3c6f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Shaders\Skybox Reflection">
+      <UniqueIdentifier>{9e2b3623-cf21-4f41-a918-59d8f5daa35f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Shaders\Default Cube">
+      <UniqueIdentifier>{bfca1c7a-5479-4d34-ad90-e4dd6f00b2cd}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\stb_image.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Classes\Shader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Classes\Camera.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Classes\Mesh.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Classes\Model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Classes\Renderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="include\glad\src\glad.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Classes\Renderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Nulliz.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Shaders\Vertex.glsl">
+      <Filter>Source Files\Shaders\Main</Filter>
+    </None>
+    <None Include="Resources\Shaders\Fragment.glsl">
+      <Filter>Source Files\Shaders\Main</Filter>
+    </None>
+    <None Include="Resources\Shaders\LightFragment.glsl">
+      <Filter>Source Files\Shaders\Default Cube</Filter>
+    </None>
+    <None Include="Resources\Shaders\LightVertex.glsl">
+      <Filter>Source Files\Shaders\Default Cube</Filter>
+    </None>
+    <None Include="Resources\Shaders\ScreenTextureVertex.glsl">
+      <Filter>Source Files\Shaders\Post Processing</Filter>
+    </None>
+    <None Include="Resources\Shaders\ScreenTextureFragment.glsl">
+      <Filter>Source Files\Shaders\Post Processing</Filter>
+    </None>
+    <None Include="Resources\Shaders\SkyboxVertex.glsl">
+      <Filter>Source Files\Shaders\Skybox</Filter>
+    </None>
+    <None Include="Resources\Shaders\SkyboxFragment.glsl">
+      <Filter>Source Files\Shaders\Skybox</Filter>
+    </None>
+    <None Include="Resources\Shaders\SkyboxReflectionFragment.glsl">
+      <Filter>Source Files\Shaders\Skybox Reflection</Filter>
+    </None>
+    <None Include="Resources\Shaders\SkyboxReflectionVertex.glsl">
+      <Filter>Source Files\Shaders\Skybox Reflection</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Resources\Textures\container.png">
+      <Filter>Resource Files\Textures\ObjectTextures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\container_specular.png">
+      <Filter>Resource Files\Textures\ObjectTextures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\face.png">
+      <Filter>Resource Files\Textures\ObjectTextures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\grass.png">
+      <Filter>Resource Files\Textures\ObjectTextures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\MissingTexture.png">
+      <Filter>Resource Files\Textures\ObjectTextures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\window.png">
+      <Filter>Resource Files\Textures\ObjectTextures</Filter>
+    </Image>
+    <Image Include="Resources\Textures\CubemapTop.jpg">
+      <Filter>Resource Files\Textures\Cubemap</Filter>
+    </Image>
+    <Image Include="Resources\Textures\CubemapBack.jpg">
+      <Filter>Resource Files\Textures\Cubemap</Filter>
+    </Image>
+    <Image Include="Resources\Textures\CubemapBottom.jpg">
+      <Filter>Resource Files\Textures\Cubemap</Filter>
+    </Image>
+    <Image Include="Resources\Textures\CubemapFront.jpg">
+      <Filter>Resource Files\Textures\Cubemap</Filter>
+    </Image>
+    <Image Include="Resources\Textures\CubemapLeft.jpg">
+      <Filter>Resource Files\Textures\Cubemap</Filter>
+    </Image>
+    <Image Include="Resources\Textures\CubemapRight.jpg">
+      <Filter>Resource Files\Textures\Cubemap</Filter>
+    </Image>
+  </ItemGroup>
+</Project>

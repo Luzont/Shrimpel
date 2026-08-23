@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Nulliz/Nulliz.vcxproj" Id="8558877f-6b64-471f-b58d-c3854606f2f9" />
+</Solution>
