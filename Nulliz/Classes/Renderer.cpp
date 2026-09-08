@@ -17,6 +17,33 @@ bool firstMouse = true;
 // Camera instance
 Camera MainCamera(glm::vec3(0.0f, 0.0f, 3.0f));
 
+struct PointLight {
+	glm::vec3 Position;
+
+	float Constant;
+	float Linear;
+	float Quadratic;
+
+	glm::vec3 Ambient;
+	glm::vec3 Diffuse;
+	glm::vec3 Specular;
+};
+
+struct SpotLight {
+	glm::vec3 Position;
+	glm::vec3 Direction;
+	float Cutoff;
+	float OuterCutoff;
+
+	float Constant;
+	float Linear;
+	float Quadratic;
+
+	glm::vec3 Ambient;
+	glm::vec3 Diffuse;
+	glm::vec3 Specular;
+};
+
 void MouseCallback(GLFWwindow* window, double xpos, double ypos)
 {
 	if (firstMouse)
@@ -112,8 +139,8 @@ unsigned int LoadCubemap(std::vector<std::string> Faces)
 		{
 			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, Data);
 			stbi_image_free(Data);
-		} 
-		else 
+		}
+		else
 		{
 			std::cout << "Cubemap texture failed to load at path: " << Faces[i] << std::endl;
 			stbi_image_free(Data);
@@ -131,6 +158,8 @@ unsigned int LoadCubemap(std::vector<std::string> Faces)
 
 int main()
 {
+	MainCamera.MovementSpeed = 50;
+
 	float Vertices[] = {
 		// positions          // normals           // texture coords
 		-0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 0.0f,
@@ -263,21 +292,63 @@ int main()
 		glm::vec3(0.0f,  0.0f, -3.0f)
 	};
 
-	// Vertex Objects
-	unsigned int Framebuffer;
-	unsigned int Renderbuffer;
-	unsigned int TextureColorbuffer;
+	unsigned int MSAABuffer;
+	unsigned int MSAAColorBuffer;
+	unsigned int MSAADepthBuffer;
+
+	unsigned int IntermediateBuffer;
+	unsigned int ResolvedColorBuffer;
 
 	unsigned int SkyboxVBO;
 	unsigned int ScreenQuadVBO;
-	unsigned int StaticObjectVBO;
-	unsigned int DynamicObjectVBO;
+	unsigned int CubeInstanceVertexVBO;
+	unsigned int CubeInstanceMatrixVBO;
+	unsigned int LightVBO;
+	unsigned int ContainerVBO;
 
 	unsigned int ScreenQuadVAO;
 	unsigned int SkyboxVAO;
-	unsigned int ModelVAO;
-	unsigned int WindowVAO;
+	unsigned int ContainerVAO;
+	unsigned int CubeInstanceVAO;
 	unsigned int LightVAO;
+
+	unsigned int PointLightSSBO;
+	unsigned int SpotLightSSBO;
+
+	unsigned short MaxLights = 64;
+	std::vector<PointLight> PointLights;
+	std::vector<SpotLight> SpotLights;
+
+	unsigned short MSAASamples = 4;
+
+	unsigned int AmountOfInstancedCubes = 1000000;
+	glm::mat4* ModelMatrices;
+	ModelMatrices = new glm::mat4[AmountOfInstancedCubes];
+	srand(glfwGetTime());
+	float Radius = 70.0;
+	float Offset = 10.0f;
+
+	for (unsigned int i = 0; i < AmountOfInstancedCubes; i++)
+	{
+		glm::mat4 InstancedCube = glm::mat4(1.0f);
+
+		float Angle = (float)i / (float)AmountOfInstancedCubes * 360.0f;
+		float Displacement = (rand() % (int)(2 * Offset * 100)) / 100.0f;
+		float X = sin(Angle) * Radius + Displacement;
+		Displacement = (rand() % (int)(2 * Offset * 100)) / 100.0f;
+		float Y = Displacement * 0.4f;
+		Displacement = (rand() % (int)(2 * Offset * 100)) / 100.0f;
+		float Z = cos(Angle) * Radius + Displacement;
+		InstancedCube = glm::translate(InstancedCube, glm::vec3(X, Y, Z));
+
+		float Scale = (rand() % 50) / 75.0f;
+		InstancedCube = glm::scale(InstancedCube, glm::vec3(Scale));
+
+		float RotationAngle = (rand() % 360);
+		InstancedCube = glm::rotate(InstancedCube, RotationAngle, glm::vec3(0.4f, 0.6f, 0.8f));
+
+		ModelMatrices[i] = InstancedCube;
+	}
 
 	std::vector<glm::vec3> VertexArrayObjectPositions;
 	std::map<float, glm::vec3> DepthSortedVertexArrayObjects;
@@ -287,12 +358,13 @@ int main()
 	// GLFW and GLAD initalization
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_SAMPLES, 4);
 
-	#ifdef __APPLE__
+#ifdef __APPLE__
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-	#endif
+#endif
 
 	unsigned short WindowHeight = 600;
 	unsigned short WindowWidth = 800;
@@ -325,37 +397,68 @@ int main()
 	Shader SkyboxShader("Resources/Shaders/SkyboxVertex.glsl", "Resources/Shaders/SkyboxFragment.glsl");
 	Shader SkyboxReflection("Resources/Shaders/SkyboxReflectionVertex.glsl", "Resources/Shaders/SkyboxReflectionFragment.glsl");
 
-	// ======== FRAMEBUFFER SETUP ========
-	glGenFramebuffers(1, &Framebuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, Framebuffer);
+	// ======== LIGHT SSBOs ========
+	glGenBuffers(1, &PointLightSSBO);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, PointLightSSBO);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(PointLight) * MaxLights, NULL, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, PointLightSSBO);
 
-	// ======== TEXTURE COLORBUFFER SETUP ========
-	glGenTextures(1, &TextureColorbuffer);
-	glBindTexture(GL_TEXTURE_2D, TextureColorbuffer);
+	glGenBuffers(1, &SpotLightSSBO);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, SpotLightSSBO);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(SpotLight) * MaxLights, NULL, GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, SpotLightSSBO);
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+	// ======== MSAA FRAMEBUFFER SETUP (for rendering) ========
+	glGenFramebuffers(1, &MSAABuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, MSAABuffer);
+
+	// MSAA color buffer
+	glGenTextures(1, &MSAAColorBuffer);
+	glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, MSAAColorBuffer);
+	glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, MSAASamples, GL_RGB, WindowWidth, WindowHeight, GL_TRUE);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, MSAAColorBuffer, 0);
+
+	// MSAA depth/stencil buffer
+	glGenRenderbuffers(1, &MSAADepthBuffer);
+	glBindRenderbuffer(GL_RENDERBUFFER, MSAADepthBuffer);
+	glRenderbufferStorageMultisample(GL_RENDERBUFFER, MSAASamples, GL_DEPTH24_STENCIL8, WindowWidth, WindowHeight);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, MSAADepthBuffer);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::MSAA_FRAMEBUFFER_INCOMPLETE" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	// ======== INTERMEDIATE FRAMEBUFFER SETUP (for resolving) ========
+	glGenFramebuffers(1, &IntermediateBuffer);
+	glBindFramebuffer(GL_FRAMEBUFFER, IntermediateBuffer);
+
+	// Regular (non-MSAA) color buffer for resolved output
+	glGenTextures(1, &ResolvedColorBuffer);
+	glBindTexture(GL_TEXTURE_2D, ResolvedColorBuffer);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, WindowWidth, WindowHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glBindTexture(GL_TEXTURE_2D, 0);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ResolvedColorBuffer, 0);
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, TextureColorbuffer, 0);
-
-	// ========= RENDERBUFFER SETUP ========
-	glGenRenderbuffers(1, &Renderbuffer);
-	glBindRenderbuffer(GL_RENDERBUFFER, Renderbuffer);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, WindowWidth, WindowHeight);
-	glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, Renderbuffer);
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::INTERMEDIATE_FRAMEBUFFER_INCOMPLETE" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	// ======== VBO SETUP ========
-	glGenBuffers(1, &StaticObjectVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, StaticObjectVBO);
+	glGenBuffers(1, &ContainerVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, ContainerVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_STATIC_DRAW);
+
+	glGenBuffers(1, &LightVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, LightVBO);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_STATIC_DRAW);
 
 	// ======== SETUP LIGHT VAO ========
 	glGenVertexArrays(1, &LightVAO);
 	glBindVertexArray(LightVAO);
-	glBindBuffer(GL_ARRAY_BUFFER, StaticObjectVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, LightVBO);
 
 	// aPos
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
@@ -391,12 +494,10 @@ int main()
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
 
-	// ======== SETUP MODEL VAO ========
-	glGenVertexArrays(1, &ModelVAO);
-	glGenBuffers(1, &StaticObjectVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, StaticObjectVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_STATIC_DRAW);
-	glBindVertexArray(ModelVAO);
+	// ======== SETUP CONTAINER VAO ========
+	glGenVertexArrays(1, &ContainerVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, ContainerVBO);
+	glBindVertexArray(ContainerVAO);
 
 	// aPos
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
@@ -406,40 +507,52 @@ int main()
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
-	// aTexture
+	// aTextureCoordinate
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 	glEnableVertexAttribArray(2);
+
+	// ======== SETUP INSTANCED CUBE VAO ========
+	glGenVertexArrays(1, &CubeInstanceVAO);
+	glBindVertexArray(CubeInstanceVAO);
+
+	// Vertex data
+	glGenBuffers(1, &CubeInstanceVertexVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, CubeInstanceVertexVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_STATIC_DRAW);
+
+	// Vertex attributes
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+
+	// Instance matrices
+	glGenBuffers(1, &CubeInstanceMatrixVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, CubeInstanceMatrixVBO);
+	glBufferData(GL_ARRAY_BUFFER, AmountOfInstancedCubes * sizeof(glm::mat4), ModelMatrices, GL_STATIC_DRAW);
+
+	// Instance matrix attributes
+	std::size_t Vec4Size = sizeof(glm::vec4);
+	for (int i = 0; i < 4; i++) {
+		glEnableVertexAttribArray(3 + i);
+		glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(i * Vec4Size));
+		glVertexAttribDivisor(3 + i, 1);
+	}
 
 	// Unbind
 	glBindVertexArray(0);
 
-	/* ======== SETUP GRASS TOUCHING VAO ========
-	glGenVertexArrays(1, &WindowVAO);
-	glGenBuffers(1, &DynamicObjectVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, DynamicObjectVBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(GrassVertices), GrassVertices, GL_STATIC_DRAW);
-	glBindVertexArray(WindowVAO);
-
-	// aPos
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
-	glEnableVertexAttribArray(0);
-
-	// aNormal
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(1);
-
-	// aTexture
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-	glEnableVertexAttribArray(2);*/
+	// Give locations 3-6 (InstanceMatrix) an identity-matrix default
+	glVertexAttrib4f(3, 1.0f, 0.0f, 0.0f, 0.0f);
+	glVertexAttrib4f(4, 0.0f, 1.0f, 0.0f, 0.0f);
+	glVertexAttrib4f(5, 0.0f, 0.0f, 1.0f, 0.0f);
+	glVertexAttrib4f(6, 0.0f, 0.0f, 0.0f, 1.0f);
 
 	// Generate Textures
 	unsigned int ContainerDiffuse = GenerateTexture("Resources/Textures/container.png", 0, true);
 	unsigned int MissingTexture = GenerateTexture("Resources/Textures/MissingTexture.png", 0, true);
-	// unsigned int ContainerSpecular = GenerateTexture("Resources/Textures/container_specular.png", 1, true);
-	// unsigned int WindowTexture = GenerateTexture("Resources/Textures/window.png", 0, true);
-	
-	//glm::mat4 ModelWithGrassOrSomeShitLikeThatIdk = glm::mat4(1.0f);
-	//ModelWithGrassOrSomeShitLikeThatIdk = glm::translate(ModelWithGrassOrSomeShitLikeThatIdk, glm::vec3(0.0f, 0.0f, 0.0f));  // Position the main object
 
 	glm::mat4 LightModel = glm::mat4(1.0f);
 	LightModel = glm::translate(LightModel, LightPosition);
@@ -448,24 +561,7 @@ int main()
 	glm::mat4 View;
 	glm::mat4 Projection;
 
-	/*std::vector<glm::vec3> Windows;
-	Windows.push_back(glm::vec3(-1.5f, 0.0f, -0.48f));
-	Windows.push_back(glm::vec3(1.5f, 0.0f, 0.51f));
-	Windows.push_back(glm::vec3(0.0f, 0.0f, 0.7f));
-	Windows.push_back(glm::vec3(-0.3f, 0.0f, -2.3f));
-	Windows.push_back(glm::vec3(0.5f, 0.0f, -0.6f));
-
-	for (unsigned int i = 0; i < Windows.size(); i++)
-	{
-		VertexArrayObjectPositions.push_back(Windows[i]);
-	}*/
-
-	//glBindVertexArray(WindowVAO);
-	//glBindTexture(GL_TEXTURE_2D, WindowTexture);
-
-	glm::mat4 Cube = glm::mat4(1.0f);
-
-	std::vector<std::string> Faces = 
+	std::vector<std::string> Faces =
 	{
 		"Resources/Textures/CubemapRight.png",
 		"Resources/Textures/CubemapLeft.png",
@@ -483,9 +579,42 @@ int main()
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-		std::cout << "ERROR::FRAMEBUFFER::FRAMEBUFFER_INCOMPLETE" << std::endl;
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glEnable(GL_MULTISAMPLE);
+
+	PointLight PointLight1;
+	PointLight PointLight2;
+	SpotLight SpotLight1;
+
+	PointLight1.Position = LightPosition;
+	PointLight1.Ambient = glm::vec3(0.1f, 0.1f, 0.1f);
+	PointLight1.Diffuse = glm::vec3(0.978f, 0.2411f, 0.962f);
+	PointLight1.Specular = glm::vec3(1.0f, 1.0f, 1.0f);
+	PointLight1.Constant = 1.0f;
+	PointLight1.Linear = 0.09f;
+	PointLight1.Quadratic = 0.032f;
+
+	PointLight2.Position = -LightPosition;
+	PointLight2.Ambient = glm::vec3(0.05f, 0.05f, 0.05f);
+	PointLight2.Diffuse = glm::vec3(0.05f, 0.87f, 0.9f);
+	PointLight2.Specular = glm::vec3(1.0f, 1.0f, 1.0f);
+	PointLight2.Constant = 1.0f;
+	PointLight2.Linear = 0.09f;
+	PointLight2.Quadratic = 0.032f;
+
+	SpotLight1.Position = MainCamera.Position;
+	SpotLight1.Direction = MainCamera.Front;
+	SpotLight1.Ambient = glm::vec3(0.0f, 0.0f, 0.0f);
+	SpotLight1.Diffuse = glm::vec3(0.0f, 0.0f, 0.0f);
+	SpotLight1.Specular = glm::vec3(0.0f, 0.0f, 0.0f);
+	SpotLight1.Constant = 1.0f;
+	SpotLight1.Linear = 0.09f;
+	SpotLight1.Quadratic = 0.032f;
+	SpotLight1.Cutoff = glm::cos(glm::radians(12.5f));
+	SpotLight1.OuterCutoff = glm::cos(glm::radians(15.0f));
+
+	PointLights.push_back(PointLight1);
+	PointLights.push_back(PointLight2);
+	SpotLights.push_back(SpotLight1);
 
 	// Render loop
 	while (!glfwWindowShouldClose(Window))
@@ -502,8 +631,8 @@ int main()
 		View = MainCamera.GetViewMatrix();
 		Projection = glm::perspective(glm::radians(MainCamera.FOV), static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight), 0.001f, 100000.0f);
 
-		// Rendering
-		glBindFramebuffer(GL_FRAMEBUFFER, Framebuffer);
+		// ======== RENDER TO MSAA FRAMEBUFFER ========
+		glBindFramebuffer(GL_FRAMEBUFFER, MSAABuffer);
 		glClearColor(0.05f, 0.19f, 0.44f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 		glEnable(GL_DEPTH_TEST);
@@ -524,77 +653,61 @@ int main()
 		MainShader.SetVec3("directionalLight.Ambient", glm::vec3(0.5f, 0.5f, 0.5f));
 		MainShader.SetVec3("directionalLight.Diffuse", glm::vec3(0.4f, 0.4f, 0.4f));
 		MainShader.SetVec3("directionalLight.Specular", glm::vec3(0.5f, 0.5f, 0.5f));
-		// point light 1
-		MainShader.SetVec3("pointLights[0].Position", LightPosition);
-		MainShader.SetVec3("pointLights[0].Ambient", glm::vec3(0.1f, 0.1f, 0.1f));
-		MainShader.SetVec3("pointLights[0].Diffuse", glm::vec3(0.978f, 0.2411f, 0.962f));
-		MainShader.SetVec3("pointLights[0].Specular", glm::vec3(1.0f, 1.0f, 1.0f));
-		MainShader.SetFloat("pointLights[0].Constant", 1.0f);
-		MainShader.SetFloat("pointLights[0].Linear", 0.09f);
-		MainShader.SetFloat("pointLights[0].Quadratic", 0.032f);
-		// point light 2
-		MainShader.SetVec3("pointLights[1].Position", -LightPosition);
-		MainShader.SetVec3("pointLights[1].Ambient", glm::vec3(0.05f, 0.05f, 0.05f));
-		MainShader.SetVec3("pointLights[1].Diffuse", glm::vec3(0.05f, 0.87f, 0.9f));
-		MainShader.SetVec3("pointLights[1].Specular", glm::vec3(1.0f, 1.0f, 1.0f));
-		MainShader.SetFloat("pointLights[1].Constant", 1.0f);
-		MainShader.SetFloat("pointLights[1].Linear", 0.09f);
-		MainShader.SetFloat("pointLights[1].Quadratic", 0.032f);
-		// spotLight
-		MainShader.SetVec3("spotLights[0].Position", MainCamera.Position);
-		MainShader.SetVec3("spotLights[0].Direction", MainCamera.Front);
-		MainShader.SetVec3("spotLights[0].Ambient", glm::vec3(0.0f));
-		MainShader.SetVec3("spotLights[0].Diffuse", glm::vec3(0.0f));
-		MainShader.SetVec3("spotLights[0].Specular", glm::vec3(0.0f));
-		MainShader.SetFloat("spotLights[0].Constant", 1.0f);
-		MainShader.SetFloat("spotLights[0].Linear", 0.09f);
-		MainShader.SetFloat("spotLights[0].Quadratic", 0.032f);
-		MainShader.SetFloat("spotLights[0].Cutoff", glm::cos(glm::radians(12.5f)));
-		MainShader.SetFloat("spotLights[0].OuterCutoff", glm::cos(glm::radians(15.0f)));
 
-		/*for (unsigned int i = 0; i < VertexArrayObjectPositions.size(); i++)
-		{
-			float Distance = glm::length(MainCamera.Position - VertexArrayObjectPositions[i]);
-			DepthSortedVertexArrayObjects[Distance] = VertexArrayObjectPositions[i];
-		}
+		// Do light stuff
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, PointLightSSBO);
 
-		for (std::map<float, glm::vec3>::reverse_iterator Itterator = DepthSortedVertexArrayObjects.rbegin(); Itterator != DepthSortedVertexArrayObjects.rend(); Itterator++)
-		{
-			ModelWithGrassOrSomeShitLikeThatIdk = glm::mat4(1.0f);
-			ModelWithGrassOrSomeShitLikeThatIdk = glm::translate(ModelWithGrassOrSomeShitLikeThatIdk, Itterator->second);
-			MainShader.SetMat4("Model", ModelWithGrassOrSomeShitLikeThatIdk);
-			glDrawArrays(GL_TRIANGLES, 0, 6);
-		}*/
+		size_t PointLightSize = PointLights.size() * sizeof(PointLight);
 
-		//Backpack.Draw(MainShader);
+		int BufferSize;
+		glGetBufferParameteriv(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE, &BufferSize);
 
-		SkyboxReflection.Use();
+		if ((GLsizei)PointLightSize > BufferSize)
+			glBufferData(GL_SHADER_STORAGE_BUFFER, PointLightSize * 2, NULL, GL_DYNAMIC_DRAW);
 
-		SkyboxReflection.SetMat4("View", View);
-		SkyboxReflection.SetMat4("Projection", Projection);
-		SkyboxReflection.SetVec3("CameraPosition", MainCamera.Position);
-		SkyboxShader.SetInt("Skybox", SkyboxVAO);
+		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, PointLightSize, PointLights.data());
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-		// Draw cubes 
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, SpotLightSSBO);
+
+		size_t SpotLightSize = SpotLights.size() * sizeof(SpotLight);
+
+		if ((GLsizei)SpotLightSize < BufferSize)
+			glBufferData(GL_SHADER_STORAGE_BUFFER, SpotLightSize * 2, NULL, GL_DYNAMIC_DRAW);
+
+		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, SpotLightSize, SpotLights.data());
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+		MainShader.SetInt("NumberOfPointLights", PointLights.size());
+		MainShader.SetInt("NumberOfSpotLights", SpotLights.size());
+
+		// Container rendering
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, ContainerDiffuse);
-		glBindVertexArray(ModelVAO);
+		glBindVertexArray(ContainerVAO);
 
-		for (int i = 0; i < 10; i++)
-		{
-			Cube = glm::mat4(1.0f);
-			Cube = glm::translate(Cube, cubePositions[i]);
-			SkyboxReflection.SetMat4("Model", Cube);
-			glDrawArrays(GL_TRIANGLES, 0, 36);
-		}
+		glm::mat4 AllMightyCube = glm::mat4(1.0f);
+		AllMightyCube = glm::translate(AllMightyCube, glm::vec3(0.0f, -3.0f, 0.0f));
+		AllMightyCube = glm::scale(AllMightyCube, glm::vec3(4.0f, 4.0f, 4.0f));
+		MainShader.SetMat4("Model", AllMightyCube);
+		glDrawArraysInstanced(GL_TRIANGLES, 0, 36, 1);
 
-		// ======== DRAW LIGHT OBJECT ========s
+		MainShader.SetMat4("Model", glm::mat4(1.0f));
+		glBindVertexArray(CubeInstanceVAO);
+		glDrawArraysInstanced(GL_TRIANGLES, 0, 36, AmountOfInstancedCubes);
+
+		// ======== DRAW LIGHT OBJECT ========
 		LightShader.Use();
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindVertexArray(LightVAO);
 
 		// Set uniforms for LightShader
 		LightShader.SetMat4("Model", LightModel);
 		LightShader.SetMat4("View", View);
 		LightShader.SetMat4("Projection", Projection);
+
+		glDrawArrays(GL_TRIANGLES, 0, 36);
 
 		// ======== DRAW SKYBOX ========
 		glDepthMask(GL_FALSE);
@@ -610,35 +723,46 @@ int main()
 		glDrawArrays(GL_TRIANGLES, 0, 36);
 		glDepthMask(GL_TRUE);
 
-		// Bind VAO and draw
-		glBindVertexArray(LightVAO);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
+		// ======== RESOLVE MSAA TO INTERMEDIATE FRAMEBUFFER ========
+		glBindFramebuffer(GL_READ_FRAMEBUFFER, MSAABuffer);
+		glBindFramebuffer(GL_DRAW_FRAMEBUFFER, IntermediateBuffer);
+		glBlitFramebuffer(0, 0, WindowWidth, WindowHeight, 0, 0, WindowWidth, WindowHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
-		DepthSortedVertexArrayObjects.clear();
-
-		// Second pass
+		// ======== DISPLAY RESOLVED TEXTURE ON SCREEN ========
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		ScreenTextureShader.Use();
 		glBindVertexArray(ScreenQuadVAO);
 		glDisable(GL_DEPTH_TEST);
-		glBindTexture(GL_TEXTURE_2D, TextureColorbuffer);
+		glBindTexture(GL_TEXTURE_2D, ResolvedColorBuffer);
 		glDrawArrays(GL_TRIANGLES, 0, 6);
+		glEnable(GL_DEPTH_TEST);
 
 		// Check and call events and swap the buffers
 		glfwSwapBuffers(Window);
 		glfwPollEvents();
 	}
 
-	glDeleteBuffers(1, &LightVAO);
-	glDeleteBuffers(1, &ModelVAO);
-	glDeleteBuffers(1, &WindowVAO);
-	glDeleteBuffers(1, &DynamicObjectVBO);
-	glDeleteBuffers(1, &StaticObjectVBO);
-	glDeleteFramebuffers(1, &Framebuffer);
-	glDeleteRenderbuffers(1, &Renderbuffer);
+	delete[] ModelMatrices;
+
+	glDeleteBuffers(1, &LightVBO);
+	glDeleteBuffers(1, &SkyboxVBO);
+	glDeleteBuffers(1, &ScreenQuadVBO);
+	glDeleteBuffers(1, &ContainerVBO);
+	glDeleteBuffers(1, &CubeInstanceVertexVBO);
+	glDeleteBuffers(1, &CubeInstanceMatrixVBO);
+	glDeleteBuffers(1, &PointLightSSBO);
+	glDeleteBuffers(1, &SpotLightSSBO);
+	glDeleteVertexArrays(1, &LightVAO);
+	glDeleteVertexArrays(1, &ContainerVAO);
+	glDeleteVertexArrays(1, &CubeInstanceVAO);
+	glDeleteFramebuffers(1, &MSAABuffer);
+	glDeleteFramebuffers(1, &IntermediateBuffer);
+	glDeleteRenderbuffers(1, &MSAADepthBuffer);
+	glDeleteTextures(1, &MSAAColorBuffer);
+	glDeleteTextures(1, &ResolvedColorBuffer);
 
 	glfwTerminate();
 	return 0;

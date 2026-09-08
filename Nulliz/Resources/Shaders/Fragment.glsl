@@ -1,6 +1,4 @@
 #version 460 core
-#define NumberOfPointLights 1
-#define NumberOfSpotLights 1
 
 struct Material {
     sampler2D Diffuse;
@@ -43,6 +41,16 @@ struct SpotLight {
     vec3 Specular;       
 };
 
+layout (std430, binding = 0) buffer PointLightBlock
+{
+    PointLight PointLights[];
+};
+
+layout (std430, binding = 1) buffer SpotLightBlock
+{
+    SpotLight SpotLights[];
+};
+
 out vec4 FragColor;
 
 in vec2 TextureCoordinate;
@@ -52,11 +60,12 @@ in vec3 FragPos;
 float NearPlane = 0.001;
 float FarPlane = 100000;
 
+uniform int NumberOfPointLights;
+uniform int NumberOfSpotLights;
+
 uniform sampler2D Texture1;
 uniform Material material;
-uniform DirectionalLight directionalLight; 
-uniform PointLight pointLights[NumberOfPointLights];
-uniform SpotLight spotLights[NumberOfSpotLights];
+uniform DirectionalLight directionalLight;
 uniform vec3 ViewPosition;
 
 vec3 CalculateDirectionalLight(DirectionalLight light, vec3 Normal, vec3 ViewDirection);
@@ -67,8 +76,8 @@ vec3 CalculateDirectionalLight(DirectionalLight light, vec3 Normal, vec3 ViewDir
 {
     vec3 LightDirection = normalize(-light.Direction);
     float Diff = max(dot(Normal, LightDirection), 0.0);
-    vec3 ReflectionDirection = reflect(-LightDirection, Normal);
-    float Spec = pow(max(dot(ViewDirection, ReflectionDirection), 0.0), material.Shininess);
+    vec3 HalfwayDirection = normalize(LightDirection + ViewDirection);
+    float Spec = pow(max(dot(Normal, HalfwayDirection), 0.0), material.Shininess);
 
     vec3 Ambient = light.Ambient * vec3(texture(material.Diffuse, TextureCoordinate));
     vec3 Diffuse = light.Diffuse * Diff * vec3(texture(material.Diffuse, TextureCoordinate));
@@ -80,10 +89,10 @@ vec3 CalculateDirectionalLight(DirectionalLight light, vec3 Normal, vec3 ViewDir
 vec3 CalculatePointLight(PointLight light, vec3 Normal, vec3 FragmentPosition, vec3 ViewDirection)
 {
     vec3 LightDirection = normalize(light.Position - FragmentPosition);
+    vec3 HalfwayDirection = normalize(LightDirection + ViewDirection);
     float Diff = max(dot(Normal, LightDirection), 0.0);
 
-    vec3 ReflectionDirection = reflect(-LightDirection, Normal);
-    float Spec = pow(max(dot(ViewDirection, ReflectionDirection), 0.0), material.Shininess);
+    float Spec = pow(max(dot(Normal, HalfwayDirection), 0.0), material.Shininess);
 
     float Distance = length(light.Position - FragmentPosition);
     float Attenuation = 1.0 / (light.Constant + light.Linear * Distance + light.Quadratic * (Distance * Distance));
@@ -101,10 +110,10 @@ vec3 CalculatePointLight(PointLight light, vec3 Normal, vec3 FragmentPosition, v
 vec3 CalculateSpotLight(SpotLight light, vec3 Normal, vec3 FragmentPosition, vec3 ViewDirection)
 {
     vec3 LightDirection = normalize(light.Position - FragmentPosition);
+    vec3 HalfwayDirection = normalize(LightDirection + ViewDirection);
     float Diff = max(dot(Normal, LightDirection), 0.0);
 
-    vec3 ReflectionDirection = reflect(-LightDirection, Normal);
-    float Spec = pow(max(dot(ViewDirection, ReflectionDirection), 0.0), material.Shininess);
+    float Spec = pow(max(dot(Normal, HalfwayDirection), 0.0), material.Shininess);
 
     float Distance = length(light.Position - FragmentPosition);
     float Attenuation = 1.0 / (light.Constant + light.Linear * Distance + light.Quadratic * (Distance * Distance));
@@ -141,11 +150,11 @@ void main()
 
     // Point lights
     for (int i=0; i < NumberOfPointLights; i++)
-        Result += CalculatePointLight(pointLights[i], Norm, FragPos, ViewDirection);
+        Result += CalculatePointLight(PointLights[i], Norm, FragPos, ViewDirection);
 
     // Spot lights
-    for (int i=0; i< NumberOfSpotLights; i++)
-        Result += CalculateSpotLight(spotLights[i], Norm, FragPos, ViewDirection);
+    for (int i=0; i < NumberOfSpotLights; i++)
+        Result += CalculateSpotLight(SpotLights[i], Norm, FragPos, ViewDirection);
 
     FragColor = vec4(Result, 1.0) * TextureColor;
 }
