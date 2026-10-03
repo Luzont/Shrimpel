@@ -167,6 +167,8 @@
     <ResourceCompile Include="Nulliz.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Resources\Shaders\DepthMapFragment.glsl" />
+    <None Include="Resources\Shaders\DepthMapVertex.glsl" />
     <None Include="Resources\Shaders\Fragment.glsl" />
     <None Include="Resources\Shaders\LightFragment.glsl" />
     <None Include="Resources\Shaders\LightVertex.glsl" />

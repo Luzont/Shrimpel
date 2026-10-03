@@ -158,7 +158,7 @@ unsigned int LoadCubemap(std::vector<std::string> Faces)
 
 int main()
 {
-	MainCamera.MovementSpeed = 50;
+	MainCamera.MovementSpeed = 25;
 
 	float Vertices[] = {
 		// positions          // normals           // texture coords
@@ -292,6 +292,11 @@ int main()
 		glm::vec3(0.0f,  0.0f, -3.0f)
 	};
 
+	unsigned int DepthMapFBO;
+	unsigned int DepthMap;
+	const unsigned int SHADOW_WIDTH = 32768;
+	const unsigned int SHADOW_HEIGHT = 32768;
+
 	unsigned int MSAABuffer;
 	unsigned int MSAAColorBuffer;
 	unsigned int MSAADepthBuffer;
@@ -315,52 +320,17 @@ int main()
 	unsigned int PointLightSSBO;
 	unsigned int SpotLightSSBO;
 
-	unsigned short MaxLights = 64;
+	const unsigned short MaxLights = 64;
 	std::vector<PointLight> PointLights;
 	std::vector<SpotLight> SpotLights;
 
-	unsigned short MSAASamples = 4;
-
-	unsigned int AmountOfInstancedCubes = 1000000;
-	glm::mat4* ModelMatrices;
-	ModelMatrices = new glm::mat4[AmountOfInstancedCubes];
-	srand(glfwGetTime());
-	float Radius = 70.0;
-	float Offset = 10.0f;
-
-	for (unsigned int i = 0; i < AmountOfInstancedCubes; i++)
-	{
-		glm::mat4 InstancedCube = glm::mat4(1.0f);
-
-		float Angle = (float)i / (float)AmountOfInstancedCubes * 360.0f;
-		float Displacement = (rand() % (int)(2 * Offset * 100)) / 100.0f;
-		float X = sin(Angle) * Radius + Displacement;
-		Displacement = (rand() % (int)(2 * Offset * 100)) / 100.0f;
-		float Y = Displacement * 0.4f;
-		Displacement = (rand() % (int)(2 * Offset * 100)) / 100.0f;
-		float Z = cos(Angle) * Radius + Displacement;
-		InstancedCube = glm::translate(InstancedCube, glm::vec3(X, Y, Z));
-
-		float Scale = (rand() % 50) / 75.0f;
-		InstancedCube = glm::scale(InstancedCube, glm::vec3(Scale));
-
-		float RotationAngle = (rand() % 360);
-		InstancedCube = glm::rotate(InstancedCube, RotationAngle, glm::vec3(0.4f, 0.6f, 0.8f));
-
-		ModelMatrices[i] = InstancedCube;
-	}
-
-	std::vector<glm::vec3> VertexArrayObjectPositions;
-	std::map<float, glm::vec3> DepthSortedVertexArrayObjects;
-
-	glm::vec3 LightPosition(1.2f, 1.0f, 2.0f);
+	const unsigned short MSAASamples = 5;
 
 	// GLFW and GLAD initalization
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_SAMPLES, 4);
 
 #ifdef __APPLE__
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
@@ -392,10 +362,30 @@ int main()
 	glfwSetScrollCallback(Window, ScrollCallback);
 
 	Shader MainShader("Resources/Shaders/Vertex.glsl", "Resources/Shaders/Fragment.glsl");
+	Shader DepthMapShader("Resources/Shaders/DepthMapVertex.glsl", "Resources/Shaders/DepthMapFragment.glsl");
 	Shader LightShader("Resources/Shaders/LightVertex.glsl", "Resources/Shaders/LightFragment.glsl");
 	Shader ScreenTextureShader("Resources/Shaders/ScreenTextureVertex.glsl", "Resources/Shaders/ScreenTextureFragment.glsl");
 	Shader SkyboxShader("Resources/Shaders/SkyboxVertex.glsl", "Resources/Shaders/SkyboxFragment.glsl");
 	Shader SkyboxReflection("Resources/Shaders/SkyboxReflectionVertex.glsl", "Resources/Shaders/SkyboxReflectionFragment.glsl");
+
+	// ======== DEPTH MAP ========
+	glGenFramebuffers(1, &DepthMapFBO);
+
+	glGenTextures(1, &DepthMap);
+	glBindTexture(GL_TEXTURE_2D, DepthMap);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	float BorderColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, BorderColor);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, DepthMapFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, DepthMap, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	// ======== LIGHT SSBOs ========
 	glGenBuffers(1, &PointLightSSBO);
@@ -511,7 +501,7 @@ int main()
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 	glEnableVertexAttribArray(2);
 
-	// ======== SETUP INSTANCED CUBE VAO ========
+	/* ======== SETUP INSTANCED CUBE VAO ========
 	glGenVertexArrays(1, &CubeInstanceVAO);
 	glBindVertexArray(CubeInstanceVAO);
 
@@ -531,7 +521,7 @@ int main()
 	// Instance matrices
 	glGenBuffers(1, &CubeInstanceMatrixVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, CubeInstanceMatrixVBO);
-	glBufferData(GL_ARRAY_BUFFER, AmountOfInstancedCubes * sizeof(glm::mat4), ModelMatrices, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, 1 * sizeof(glm::mat4), (const void*)1, GL_STATIC_DRAW);
 
 	// Instance matrix attributes
 	std::size_t Vec4Size = sizeof(glm::vec4);
@@ -549,17 +539,33 @@ int main()
 	glVertexAttrib4f(4, 0.0f, 1.0f, 0.0f, 0.0f);
 	glVertexAttrib4f(5, 0.0f, 0.0f, 1.0f, 0.0f);
 	glVertexAttrib4f(6, 0.0f, 0.0f, 0.0f, 1.0f);
+	commented for future reference
+	*/
 
 	// Generate Textures
 	unsigned int ContainerDiffuse = GenerateTexture("Resources/Textures/container.png", 0, true);
 	unsigned int MissingTexture = GenerateTexture("Resources/Textures/MissingTexture.png", 0, true);
 
+	glm::vec3 SceneCenter(0.0f, 0.0f, 0.0f);
+	float SceneRadius = 500.0f;
+
+	glm::vec3 LightPosition(1.2f, 1.0f, 2.0f);
+	glm::vec3 DirectionalLightDirection = glm::normalize(glm::vec3(-0.2f, -1.0f, -0.3f));
+	glm::vec3 LightViewPos = SceneCenter - DirectionalLightDirection * SceneRadius;
+
 	glm::mat4 LightModel = glm::mat4(1.0f);
 	LightModel = glm::translate(LightModel, LightPosition);
-	LightModel = glm::scale(LightModel, glm::vec3(0.2f));  // Make light cube smaller
+	LightModel = glm::scale(LightModel, glm::vec3(1.0f));
+
+	Model SceneIdk("Resources/Models/SceneThingy/scene_thingy_idk.fbx");
 
 	glm::mat4 View;
 	glm::mat4 Projection;
+
+	float LightNearPlane = 0.1f, LightFarPlane = 2.0f * SceneRadius;
+	glm::mat4 LightProjection = glm::ortho(-SceneRadius, SceneRadius, -SceneRadius, SceneRadius, LightNearPlane, LightFarPlane);
+	glm::mat4 LightView = glm::lookAt(LightViewPos, SceneCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 LightSpaceMatrix = LightProjection * LightView;
 
 	std::vector<std::string> Faces =
 	{
@@ -581,6 +587,8 @@ int main()
 
 	glEnable(GL_MULTISAMPLE);
 
+	glEnable(GL_CULL_FACE);
+
 	PointLight PointLight1;
 	PointLight PointLight2;
 	SpotLight SpotLight1;
@@ -592,14 +600,6 @@ int main()
 	PointLight1.Constant = 1.0f;
 	PointLight1.Linear = 0.09f;
 	PointLight1.Quadratic = 0.032f;
-
-	PointLight2.Position = -LightPosition;
-	PointLight2.Ambient = glm::vec3(0.05f, 0.05f, 0.05f);
-	PointLight2.Diffuse = glm::vec3(0.05f, 0.87f, 0.9f);
-	PointLight2.Specular = glm::vec3(1.0f, 1.0f, 1.0f);
-	PointLight2.Constant = 1.0f;
-	PointLight2.Linear = 0.09f;
-	PointLight2.Quadratic = 0.032f;
 
 	SpotLight1.Position = MainCamera.Position;
 	SpotLight1.Direction = MainCamera.Front;
@@ -613,8 +613,16 @@ int main()
 	SpotLight1.OuterCutoff = glm::cos(glm::radians(15.0f));
 
 	PointLights.push_back(PointLight1);
-	PointLights.push_back(PointLight2);
 	SpotLights.push_back(SpotLight1);
+
+	auto RenderScene = [&](Shader& shader) {
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, ContainerDiffuse);
+
+		glm::mat4 Model = glm::mat4(1.0f);
+		shader.SetMat4("Model", Model);
+		SceneIdk.Draw(shader); // PS: uses the backpack textures, why? because i'm lazy to map textures just to setup shadows
+	};
 
 	// Render loop
 	while (!glfwWindowShouldClose(Window))
@@ -629,7 +637,25 @@ int main()
 
 		// Get view and projection matrices from camera
 		View = MainCamera.GetViewMatrix();
-		Projection = glm::perspective(glm::radians(MainCamera.FOV), static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight), 0.001f, 100000.0f);
+		Projection = glm::perspective(glm::radians(MainCamera.FOV), static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight), 0.001f, 1000.0f);
+
+		// ======= RENDER TO DEPTH MAP ========
+		DepthMapShader.Use();
+		DepthMapShader.SetMat4("LightSpaceMatrix", LightSpaceMatrix);
+
+		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+		glBindFramebuffer(GL_FRAMEBUFFER, DepthMapFBO);
+		glClear(GL_DEPTH_BUFFER_BIT);
+		glCullFace(GL_FRONT);
+
+		RenderScene(DepthMapShader);
+
+		glCullFace(GL_BACK);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+		// ======== DO DEPTH MAP STUFF ========
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, WindowWidth, WindowHeight);
 
 		// ======== RENDER TO MSAA FRAMEBUFFER ========
 		glBindFramebuffer(GL_FRAMEBUFFER, MSAABuffer);
@@ -649,10 +675,15 @@ int main()
 		MainShader.SetMat4("View", View);
 		MainShader.SetMat4("Projection", Projection);
 
-		MainShader.SetVec3("directionalLight.Direction", glm::vec3(-0.2f, -1.0f, -0.3f));
-		MainShader.SetVec3("directionalLight.Ambient", glm::vec3(0.5f, 0.5f, 0.5f));
-		MainShader.SetVec3("directionalLight.Diffuse", glm::vec3(0.4f, 0.4f, 0.4f));
+		MainShader.SetVec3("directionalLight.Direction", DirectionalLightDirection);
+		MainShader.SetVec3("directionalLight.Ambient", glm::vec3(0.1f, 0.1f, 0.1f));
+		MainShader.SetVec3("directionalLight.Diffuse", glm::vec3(0.8f, 0.8f, 0.8f));
 		MainShader.SetVec3("directionalLight.Specular", glm::vec3(0.5f, 0.5f, 0.5f));
+
+		glActiveTexture(GL_TEXTURE10);
+		glBindTexture(GL_TEXTURE_2D, DepthMap);
+		MainShader.SetMat4("LightSpaceMatrix", LightSpaceMatrix);
+		MainShader.SetInt("ShadowMap", 10);
 
 		// Do light stuff
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, PointLightSSBO);
@@ -672,7 +703,9 @@ int main()
 
 		size_t SpotLightSize = SpotLights.size() * sizeof(SpotLight);
 
-		if ((GLsizei)SpotLightSize < BufferSize)
+		glGetBufferParameteriv(GL_SHADER_STORAGE_BUFFER, GL_BUFFER_SIZE, &BufferSize);
+
+		if ((GLsizei)SpotLightSize > BufferSize)
 			glBufferData(GL_SHADER_STORAGE_BUFFER, SpotLightSize * 2, NULL, GL_DYNAMIC_DRAW);
 
 		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, SpotLightSize, SpotLights.data());
@@ -681,20 +714,7 @@ int main()
 		MainShader.SetInt("NumberOfPointLights", PointLights.size());
 		MainShader.SetInt("NumberOfSpotLights", SpotLights.size());
 
-		// Container rendering
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, ContainerDiffuse);
-		glBindVertexArray(ContainerVAO);
-
-		glm::mat4 AllMightyCube = glm::mat4(1.0f);
-		AllMightyCube = glm::translate(AllMightyCube, glm::vec3(0.0f, -3.0f, 0.0f));
-		AllMightyCube = glm::scale(AllMightyCube, glm::vec3(4.0f, 4.0f, 4.0f));
-		MainShader.SetMat4("Model", AllMightyCube);
-		glDrawArraysInstanced(GL_TRIANGLES, 0, 36, 1);
-
-		MainShader.SetMat4("Model", glm::mat4(1.0f));
-		glBindVertexArray(CubeInstanceVAO);
-		glDrawArraysInstanced(GL_TRIANGLES, 0, 36, AmountOfInstancedCubes);
+		RenderScene(MainShader);
 
 		// ======== DRAW LIGHT OBJECT ========
 		LightShader.Use();
@@ -703,11 +723,16 @@ int main()
 		glBindVertexArray(LightVAO);
 
 		// Set uniforms for LightShader
-		LightShader.SetMat4("Model", LightModel);
 		LightShader.SetMat4("View", View);
 		LightShader.SetMat4("Projection", Projection);
 
-		glDrawArrays(GL_TRIANGLES, 0, 36);
+		for (int i = 0; i < PointLights.size(); i++)
+		{
+			glm::mat4 LightModel = glm::translate(glm::mat4(1.0f), PointLights[i].Position);
+
+			LightShader.SetMat4("Model", LightModel);
+			glDrawArrays(GL_TRIANGLES, 0, 36);
+		}
 
 		// ======== DRAW SKYBOX ========
 		glDepthMask(GL_FALSE);
@@ -733,6 +758,7 @@ int main()
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		// ======== DO POST PROCESSING ========
 		ScreenTextureShader.Use();
 		glBindVertexArray(ScreenQuadVAO);
 		glDisable(GL_DEPTH_TEST);
@@ -745,8 +771,6 @@ int main()
 		glfwPollEvents();
 	}
 
-	delete[] ModelMatrices;
-
 	glDeleteBuffers(1, &LightVBO);
 	glDeleteBuffers(1, &SkyboxVBO);
 	glDeleteBuffers(1, &ScreenQuadVBO);
@@ -758,9 +782,14 @@ int main()
 	glDeleteVertexArrays(1, &LightVAO);
 	glDeleteVertexArrays(1, &ContainerVAO);
 	glDeleteVertexArrays(1, &CubeInstanceVAO);
+	glDeleteFramebuffers(1, &DepthMapFBO);
 	glDeleteFramebuffers(1, &MSAABuffer);
 	glDeleteFramebuffers(1, &IntermediateBuffer);
 	glDeleteRenderbuffers(1, &MSAADepthBuffer);
+	glDeleteTextures(1, &CubemapTexture);
+	glDeleteTextures(1, &ContainerDiffuse);
+	glDeleteTextures(1, &MissingTexture);
+	glDeleteTextures(1, &DepthMap);
 	glDeleteTextures(1, &MSAAColorBuffer);
 	glDeleteTextures(1, &ResolvedColorBuffer);
 

@@ -40,6 +40,9 @@
     <Filter Include="Source Files\Shaders\Default Cube">
       <UniqueIdentifier>{bfca1c7a-5479-4d34-ad90-e4dd6f00b2cd}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Shaders\Depth Map">
+      <UniqueIdentifier>{bd5cc823-e53c-40dc-9767-563532f3217a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
@@ -107,6 +110,12 @@
     </None>
     <None Include="Resources\Shaders\SkyboxReflectionVertex.glsl">
       <Filter>Source Files\Shaders\Skybox Reflection</Filter>
+    </None>
+    <None Include="Resources\Shaders\DepthMapFragment.glsl">
+      <Filter>Source Files\Shaders\Depth Map</Filter>
+    </None>
+    <None Include="Resources\Shaders\DepthMapVertex.glsl">
+      <Filter>Source Files\Shaders\Depth Map</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
