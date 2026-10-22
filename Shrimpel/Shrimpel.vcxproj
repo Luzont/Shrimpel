@@ -22,7 +22,7 @@
     <VCProjectVersion>18.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{8558877f-6b64-471f-b58d-c3854606f2f9}</ProjectGuid>
-    <RootNamespace>Nulliz</RootNamespace>
+    <RootNamespace>Shrimpel</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -74,7 +74,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>FBXSDK_SHARED;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)\include\;$(ProjectDir)\include\glad\include\glad\;$(ProjectDir)\include\glad\include\;$(ProjectDir)\include\GLFW\include\GLFW;$(SolutionDir)vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
@@ -83,7 +83,11 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)include\GLFW\lib-vc2022;$(ProjectDir)Resources\Libraries\;$(SolutionDir)vcpkg\installed\x64-windows\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;assimp.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies)
+;%(AdditionalDependencies);
+$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;
+$(ProjectDir)Resources\Libraries\libfbxsdk-md.lib;libfbxsdk.lib
+;assimp.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -95,7 +99,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>FBXSDK_SHARED;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)\include\;$(ProjectDir)\include\glad\include\glad\;$(ProjectDir)\include\glad\include\;$(ProjectDir)\include\GLFW\include\GLFW;$(SolutionDir)vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
@@ -104,7 +108,11 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)include\GLFW\lib-vc2022;$(ProjectDir)Resources\Libraries\;$(SolutionDir)vcpkg\installed\x64-windows\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;assimp.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies)
+;%(AdditionalDependencies);
+$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;
+$(ProjectDir)Resources\Libraries\libfbxsdk-md.lib;libfbxsdk.lib
+;assimp.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -114,7 +122,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>FBXSDK_SHARED;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)\include\;$(ProjectDir)\include\glad\include\glad\;$(ProjectDir)\include\glad\include\;$(ProjectDir)\include\GLFW\include\GLFW;$(SolutionDir)vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
@@ -123,7 +131,11 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)include\GLFW\lib-vc2022;$(ProjectDir)Resources\Libraries\;$(SolutionDir)vcpkg\installed\x64-windows\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;assimp.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies)
+;%(AdditionalDependencies);
+$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;
+$(ProjectDir)Resources\Libraries\libfbxsdk-md.lib;libfbxsdk.lib
+;assimp.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -135,7 +147,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>FBXSDK_SHARED;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)\include\;$(ProjectDir)\include\glad\include\glad\;$(ProjectDir)\include\glad\include\;$(ProjectDir)\include\GLFW\include\GLFW;$(SolutionDir)vcpkg\installed\x64-windows\include</AdditionalIncludeDirectories>
@@ -144,7 +156,11 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(ProjectDir)include\GLFW\lib-vc2022;$(ProjectDir)Resources\Libraries\;$(SolutionDir)vcpkg\installed\x64-windows\lib</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(CoreLibraryDependencies);%(AdditionalDependencies);$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;assimp.lib</AdditionalDependencies>
+      <AdditionalDependencies>$(CoreLibraryDependencies)
+;%(AdditionalDependencies);
+$(ProjectDir)include\GLFW\lib-vc2022\glfw3.lib;
+$(ProjectDir)Resources\Libraries\libfbxsdk-md.lib;libfbxsdk.lib
+;assimp.lib</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -164,11 +180,14 @@
     <ClCompile Include="include\glad\src\glad.c" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Nulliz.rc" />
+    <ResourceCompile Include="Shrimpel.rc" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Resources\Shaders\DepthFragment.glsl" />
+    <None Include="Resources\Shaders\DepthGeometry.glsl" />
     <None Include="Resources\Shaders\DepthMapFragment.glsl" />
     <None Include="Resources\Shaders\DepthMapVertex.glsl" />
+    <None Include="Resources\Shaders\DepthVertex.glsl" />
     <None Include="Resources\Shaders\Fragment.glsl" />
     <None Include="Resources\Shaders\LightFragment.glsl" />
     <None Include="Resources\Shaders\LightVertex.glsl" />
@@ -187,7 +206,6 @@
     <Image Include="Resources\Textures\CubemapLeft.jpg" />
     <Image Include="Resources\Textures\CubemapRight.jpg" />
     <Image Include="Resources\Textures\CubemapTop.jpg" />
-    <Image Include="Resources\Textures\MissingTexture.png" />
     <Image Include="Resources\Textures\window.png" />
     <Image Include="Resources\Textures\container.png" />
     <Image Include="Resources\Textures\container_specular.png" />

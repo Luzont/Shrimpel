@@ -43,6 +43,9 @@
     <Filter Include="Source Files\Shaders\Depth Map">
       <UniqueIdentifier>{bd5cc823-e53c-40dc-9767-563532f3217a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Shaders\Depth Cubemap">
+      <UniqueIdentifier>{ea60d86b-2851-496e-8735-95d285cf4abf}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h">
@@ -76,7 +79,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="Nulliz.rc">
+    <ResourceCompile Include="Shrimpel.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
@@ -117,6 +120,15 @@
     <None Include="Resources\Shaders\DepthMapVertex.glsl">
       <Filter>Source Files\Shaders\Depth Map</Filter>
     </None>
+    <None Include="Resources\Shaders\DepthVertex.glsl">
+      <Filter>Source Files\Shaders\Depth Cubemap</Filter>
+    </None>
+    <None Include="Resources\Shaders\DepthFragment.glsl">
+      <Filter>Source Files\Shaders\Depth Cubemap</Filter>
+    </None>
+    <None Include="Resources\Shaders\DepthGeometry.glsl">
+      <Filter>Source Files\Shaders\Depth Cubemap</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="Resources\Textures\container.png">
@@ -129,9 +141,6 @@
       <Filter>Resource Files\Textures\ObjectTextures</Filter>
     </Image>
     <Image Include="Resources\Textures\grass.png">
-      <Filter>Resource Files\Textures\ObjectTextures</Filter>
-    </Image>
-    <Image Include="Resources\Textures\MissingTexture.png">
       <Filter>Resource Files\Textures\ObjectTextures</Filter>
     </Image>
     <Image Include="Resources\Textures\window.png">

@@ -15,23 +15,30 @@ float lastX = 400, lastY = 300;
 bool firstMouse = true;
 
 // Camera instance
-Camera MainCamera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera* MainCameraPointer = nullptr;
 
 struct PointLight {
-	glm::vec3 Position;
+	alignas(16) glm::vec3 Position;
 
 	float Constant;
 	float Linear;
 	float Quadratic;
 
+	float pad0[2];
+
 	glm::vec3 Ambient;
+	float pad1;
 	glm::vec3 Diffuse;
+	float pad2;
 	glm::vec3 Specular;
+	float pad3;
 };
 
+static_assert(sizeof(PointLight) == 80);
+
 struct SpotLight {
-	glm::vec3 Position;
-	glm::vec3 Direction;
+	alignas(16) glm::vec3 Position;
+	alignas(16) glm::vec3 Direction;
 	float Cutoff;
 	float OuterCutoff;
 
@@ -40,9 +47,14 @@ struct SpotLight {
 	float Quadratic;
 
 	glm::vec3 Ambient;
+	float pad0;
 	glm::vec3 Diffuse;
+	float pad1;
 	glm::vec3 Specular;
+	float pad2;
 };
+
+static_assert(sizeof(SpotLight) == 96);
 
 void MouseCallback(GLFWwindow* window, double xpos, double ypos)
 {
@@ -59,12 +71,12 @@ void MouseCallback(GLFWwindow* window, double xpos, double ypos)
 	lastX = xpos;
 	lastY = ypos;
 
-	MainCamera.ProcessMouseMovement(xoffset, yoffset);
+	MainCameraPointer->ProcessMouseMovement(xoffset, yoffset);
 }
 
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
-	MainCamera.ProcessMouseScroll(yoffset);
+	MainCameraPointer->ProcessMouseScroll(yoffset);
 }
 
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
@@ -158,7 +170,10 @@ unsigned int LoadCubemap(std::vector<std::string> Faces)
 
 int main()
 {
-	MainCamera.MovementSpeed = 25;
+	Camera MainCamera(glm::vec3(0.0f, 0.0f, 3.0f));
+	MainCameraPointer = &MainCamera;
+
+	MainCamera.MovementSpeed = 10;
 
 	float Vertices[] = {
 		// positions          // normals           // texture coords
@@ -293,9 +308,12 @@ int main()
 	};
 
 	unsigned int DepthMapFBO;
+	unsigned int DepthCubemapFBO;
 	unsigned int DepthMap;
-	const unsigned int SHADOW_WIDTH = 32768;
-	const unsigned int SHADOW_HEIGHT = 32768;
+	const unsigned int SHADOW_WIDTH = 2048;
+	const unsigned int SHADOW_HEIGHT = 2048;
+
+	unsigned int DepthCubemap;
 
 	unsigned int MSAABuffer;
 	unsigned int MSAAColorBuffer;
@@ -363,6 +381,7 @@ int main()
 
 	Shader MainShader("Resources/Shaders/Vertex.glsl", "Resources/Shaders/Fragment.glsl");
 	Shader DepthMapShader("Resources/Shaders/DepthMapVertex.glsl", "Resources/Shaders/DepthMapFragment.glsl");
+	Shader DepthCubeMapShader("Resources/Shaders/DepthVertex.glsl", "Resources/Shaders/DepthFragment.glsl", "Resources/Shaders/DepthGeometry.glsl");
 	Shader LightShader("Resources/Shaders/LightVertex.glsl", "Resources/Shaders/LightFragment.glsl");
 	Shader ScreenTextureShader("Resources/Shaders/ScreenTextureVertex.glsl", "Resources/Shaders/ScreenTextureFragment.glsl");
 	Shader SkyboxShader("Resources/Shaders/SkyboxVertex.glsl", "Resources/Shaders/SkyboxFragment.glsl");
@@ -385,6 +404,38 @@ int main()
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, DepthMap, 0);
 	glDrawBuffer(GL_NONE);
 	glReadBuffer(GL_NONE);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::INTERMEDIATE_FRAMEBUFFER_INCOMPLETE" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	// ======== DEPTH CUBE MAP ========
+	glGenFramebuffers(1, &DepthCubemapFBO);
+	glGenTextures(1, &DepthCubemap);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, DepthCubemap);
+
+	for (unsigned int i = 0; i < 6; i++)
+	{
+		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	}
+
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, DepthCubemapFBO);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, DepthCubemap, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::INTERMEDIATE_FRAMEBUFFER_INCOMPLETE" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	// ======== LIGHT SSBOs ========
@@ -542,16 +593,10 @@ int main()
 	commented for future reference
 	*/
 
-	// Generate Textures
-	unsigned int ContainerDiffuse = GenerateTexture("Resources/Textures/container.png", 0, true);
-	unsigned int MissingTexture = GenerateTexture("Resources/Textures/MissingTexture.png", 0, true);
-
 	glm::vec3 SceneCenter(0.0f, 0.0f, 0.0f);
-	float SceneRadius = 500.0f;
+	float SceneRadius = 50.0f;
 
-	glm::vec3 LightPosition(1.2f, 1.0f, 2.0f);
-	glm::vec3 DirectionalLightDirection = glm::normalize(glm::vec3(-0.2f, -1.0f, -0.3f));
-	glm::vec3 LightViewPos = SceneCenter - DirectionalLightDirection * SceneRadius;
+	glm::vec3 LightPosition(4.5f, 5.75f, -1.75f);
 
 	glm::mat4 LightModel = glm::mat4(1.0f);
 	LightModel = glm::translate(LightModel, LightPosition);
@@ -562,10 +607,23 @@ int main()
 	glm::mat4 View;
 	glm::mat4 Projection;
 
-	float LightNearPlane = 0.1f, LightFarPlane = 2.0f * SceneRadius;
+	float LightNearPlane = 1.0f, LightFarPlane = 2.0f * SceneRadius;
+	glm::vec3 DirectionalLightDirection = glm::normalize(glm::vec3(-0.2f, -1.0f, -0.3f));
+	glm::vec3 LightViewPos = SceneCenter - DirectionalLightDirection * SceneRadius;
 	glm::mat4 LightProjection = glm::ortho(-SceneRadius, SceneRadius, -SceneRadius, SceneRadius, LightNearPlane, LightFarPlane);
 	glm::mat4 LightView = glm::lookAt(LightViewPos, SceneCenter, glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 LightSpaceMatrix = LightProjection * LightView;
+
+	float AspectRatio = (float)SHADOW_WIDTH / (float)SHADOW_HEIGHT;
+	glm::mat4 ShadowProjection = glm::perspective(glm::radians(90.0f), AspectRatio, LightNearPlane, LightFarPlane);
+
+	std::vector<glm::mat4> ShadowTransforms;
+	ShadowTransforms.push_back(ShadowProjection * glm::lookAt(LightPosition, LightPosition + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+	ShadowTransforms.push_back(ShadowProjection * glm::lookAt(LightPosition, LightPosition + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+	ShadowTransforms.push_back(ShadowProjection * glm::lookAt(LightPosition, LightPosition + glm::vec3(0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, 1.0)));
+	ShadowTransforms.push_back(ShadowProjection * glm::lookAt(LightPosition, LightPosition + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)));
+	ShadowTransforms.push_back(ShadowProjection * glm::lookAt(LightPosition, LightPosition + glm::vec3(0.0, 0.0, 1.0), glm::vec3(0.0, -1.0, 0.0)));
+	ShadowTransforms.push_back(ShadowProjection * glm::lookAt(LightPosition, LightPosition + glm::vec3(0.0, 0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
 
 	std::vector<std::string> Faces =
 	{
@@ -590,12 +648,11 @@ int main()
 	glEnable(GL_CULL_FACE);
 
 	PointLight PointLight1;
-	PointLight PointLight2;
 	SpotLight SpotLight1;
 
 	PointLight1.Position = LightPosition;
-	PointLight1.Ambient = glm::vec3(0.1f, 0.1f, 0.1f);
-	PointLight1.Diffuse = glm::vec3(0.978f, 0.2411f, 0.962f);
+	PointLight1.Ambient = glm::vec3(0.25f, 0.25f, 0.25f);
+	PointLight1.Diffuse = glm::vec3(1.0f, 1.0f, 1.0f);
 	PointLight1.Specular = glm::vec3(1.0f, 1.0f, 1.0f);
 	PointLight1.Constant = 1.0f;
 	PointLight1.Linear = 0.09f;
@@ -616,21 +673,17 @@ int main()
 	SpotLights.push_back(SpotLight1);
 
 	auto RenderScene = [&](Shader& shader) {
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, ContainerDiffuse);
+		glm::mat4 model = glm::mat4(1.0f);
 
-		glm::mat4 Model = glm::mat4(1.0f);
-		shader.SetMat4("Model", Model);
-		SceneIdk.Draw(shader); // PS: uses the backpack textures, why? because i'm lazy to map textures just to setup shadows
+		model = glm::scale(model, glm::vec3(0.75f));
+		
+		shader.SetMat4("Model", model);
+		SceneIdk.Draw(shader);
 	};
 
 	// Render loop
 	while (!glfwWindowShouldClose(Window))
 	{
-		// Use the source missing texture in case texture isn't set
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, MissingTexture);
-
 		// Inputs
 		ProcessInput(Window);
 		MainCamera.ProcessInputs(Window);
@@ -639,21 +692,39 @@ int main()
 		View = MainCamera.GetViewMatrix();
 		Projection = glm::perspective(glm::radians(MainCamera.FOV), static_cast<float>(WindowWidth) / static_cast<float>(WindowHeight), 0.001f, 1000.0f);
 
-		// ======= RENDER TO DEPTH MAP ========
+		// ======= RENDER TO DIRECTIONAL LIGHT DEPTH MAP ========
 		DepthMapShader.Use();
 		DepthMapShader.SetMat4("LightSpaceMatrix", LightSpaceMatrix);
 
 		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
 		glBindFramebuffer(GL_FRAMEBUFFER, DepthMapFBO);
 		glClear(GL_DEPTH_BUFFER_BIT);
+
 		glCullFace(GL_FRONT);
 
 		RenderScene(DepthMapShader);
 
 		glCullFace(GL_BACK);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		// ======== DO DEPTH MAP STUFF ========
+		// ======== RENDER TO POINT LIGHT DEPTH MAP ========
+		DepthCubeMapShader.Use();
+		DepthCubeMapShader.SetFloat("FarPlane", LightFarPlane);
+		DepthCubeMapShader.SetVec3("LightPosition", LightPosition);
+		DepthCubeMapShader.SetMat4("Model", glm::mat4(1.0f));
+		for (int i = 0; i < 6; i++)
+			DepthCubeMapShader.SetMat4("ShadowMatrices[" + std::to_string(i) + "]", ShadowTransforms[i]);
+
+		glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+		glBindFramebuffer(GL_FRAMEBUFFER, DepthCubemapFBO);
+		glClear(GL_DEPTH_BUFFER_BIT);
+
+		glCullFace(GL_FRONT);
+
+		RenderScene(DepthCubeMapShader);
+
+		glCullFace(GL_BACK);
+
+		// ======== RESET THAT SHIT NOW ========
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glViewport(0, 0, WindowWidth, WindowHeight);
 
@@ -677,13 +748,17 @@ int main()
 
 		MainShader.SetVec3("directionalLight.Direction", DirectionalLightDirection);
 		MainShader.SetVec3("directionalLight.Ambient", glm::vec3(0.1f, 0.1f, 0.1f));
-		MainShader.SetVec3("directionalLight.Diffuse", glm::vec3(0.8f, 0.8f, 0.8f));
+		MainShader.SetVec3("directionalLight.Diffuse", glm::vec3(0.1f, 0.75f, 0.5f));
 		MainShader.SetVec3("directionalLight.Specular", glm::vec3(0.5f, 0.5f, 0.5f));
 
 		glActiveTexture(GL_TEXTURE10);
 		glBindTexture(GL_TEXTURE_2D, DepthMap);
+		glActiveTexture(GL_TEXTURE11);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, DepthCubemap);
 		MainShader.SetMat4("LightSpaceMatrix", LightSpaceMatrix);
 		MainShader.SetInt("ShadowMap", 10);
+		MainShader.SetInt("ShadowCubeMap", 11);
+		MainShader.SetFloat("PointLightFarPlane", LightFarPlane);
 
 		// Do light stuff
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, PointLightSSBO);
@@ -726,6 +801,8 @@ int main()
 		LightShader.SetMat4("View", View);
 		LightShader.SetMat4("Projection", Projection);
 
+		glDisable(GL_CULL_FACE);
+
 		for (int i = 0; i < PointLights.size(); i++)
 		{
 			glm::mat4 LightModel = glm::translate(glm::mat4(1.0f), PointLights[i].Position);
@@ -733,6 +810,8 @@ int main()
 			LightShader.SetMat4("Model", LightModel);
 			glDrawArrays(GL_TRIANGLES, 0, 36);
 		}
+
+		glEnable(GL_CULL_FACE);
 
 		// ======== DRAW SKYBOX ========
 		glDepthMask(GL_FALSE);
@@ -766,10 +845,16 @@ int main()
 		glDrawArrays(GL_TRIANGLES, 0, 6);
 		glEnable(GL_DEPTH_TEST);
 
+		//std::cout << "Camera position: " << MainCamera.Position.x << ", " << MainCamera.Position.y << ", " << MainCamera.Position.z << std::endl;
+
 		// Check and call events and swap the buffers
 		glfwSwapBuffers(Window);
 		glfwPollEvents();
 	}
+
+	CubeInstanceMatrixVBO = 0;
+	CubeInstanceMatrixVBO = 0;
+	CubeInstanceVAO = 0;
 
 	glDeleteBuffers(1, &LightVBO);
 	glDeleteBuffers(1, &SkyboxVBO);
@@ -783,12 +868,11 @@ int main()
 	glDeleteVertexArrays(1, &ContainerVAO);
 	glDeleteVertexArrays(1, &CubeInstanceVAO);
 	glDeleteFramebuffers(1, &DepthMapFBO);
+	glDeleteFramebuffers(1, &DepthCubemapFBO);
 	glDeleteFramebuffers(1, &MSAABuffer);
 	glDeleteFramebuffers(1, &IntermediateBuffer);
 	glDeleteRenderbuffers(1, &MSAADepthBuffer);
 	glDeleteTextures(1, &CubemapTexture);
-	glDeleteTextures(1, &ContainerDiffuse);
-	glDeleteTextures(1, &MissingTexture);
 	glDeleteTextures(1, &DepthMap);
 	glDeleteTextures(1, &MSAAColorBuffer);
 	glDeleteTextures(1, &ResolvedColorBuffer);

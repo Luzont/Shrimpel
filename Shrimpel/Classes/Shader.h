@@ -16,7 +16,7 @@ public:
 	unsigned int ProgramID;
 
 	// Read and build shaders
-	Shader(const char* VertexShaderPath, const char* FragmentShaderPath);
+	Shader(const char* VertexShaderPath, const char* FragmentShaderPath, const char* GeometryShaderPath = nullptr);
 
 	// Use and activate the Shader Program
 	const void Use();
@@ -26,19 +26,21 @@ public:
 	void SetInt(const std::string &Name, int Value) const;
 	void SetFloat(const std::string& Name, float Value) const;
 	void SetVec3(const std::string& Name, glm::vec3 Value) const;
+	void SetVec4(const std::string& Name, glm::vec4 Value) const;
 	void SetMat4(const std::string& Name, glm::mat4 Value) const;
 };
 
 
-Shader::Shader(const char* VertexShaderPath, const char* FragmentShaderPath)
+Shader::Shader(const char* VertexShaderPath, const char* FragmentShaderPath, const char* GeometryShaderPath)
 {
-	// 1. Retrive the Vertex/Fragment Shader source from filePath
+	bool HasGeometryShader = (GeometryShaderPath != nullptr);
+
+	// 1. Retrive the Vertex/Fragment Shader source from
 	std::string VertexCode;
 	std::string FragmentCode;
+	std::string GeometryCode;
 	std::ifstream VertexShaderFile;
 	std::ifstream FragmentShaderFile;
-
-
 
 	// 1.1 Ensure ifstream objects can throw exceptions
 	VertexShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
@@ -63,7 +65,7 @@ Shader::Shader(const char* VertexShaderPath, const char* FragmentShaderPath)
 		VertexCode = VertexShaderStream.str();
 		FragmentCode = FragmentShaderStream.str();
 	}
-	catch (std::ifstream::failure e)
+	catch (std::ifstream::failure Exception)
 	{
 		std::cout << "ERROR:SHADER::FILE_NOT_SUCCESFULLY_READ\n" << std::endl;
 	}
@@ -72,7 +74,7 @@ Shader::Shader(const char* VertexShaderPath, const char* FragmentShaderPath)
 	const char* FragmentShaderCode = FragmentCode.c_str();
 
 	// 2. Compile shaders
-	unsigned int Vertex, Fragment;
+	unsigned int Vertex, Fragment, Geometry;
 	int Success;
 	char InfoLog[512];
 
@@ -102,10 +104,47 @@ Shader::Shader(const char* VertexShaderPath, const char* FragmentShaderPath)
 		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << InfoLog << std::endl;
 	}
 
+	if (HasGeometryShader)
+	{
+		std::ifstream GeometryShaderFile;
+		GeometryShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+
+		try
+		{
+			std::stringstream GeometryShaderStream;
+
+			GeometryShaderFile.open(GeometryShaderPath);
+			GeometryShaderStream << GeometryShaderFile.rdbuf();
+			GeometryShaderFile.close();
+
+			GeometryCode = GeometryShaderStream.str();
+		}
+		catch (std::ifstream::failure Exception)
+		{
+			std::cout << "ERROR:SHADER::FILE_NOT_SUCCESFULLY_READ\n" << std::endl;
+		}
+
+		const char* GeometryShaderCode = GeometryCode.c_str();
+
+		Geometry = glCreateShader(GL_GEOMETRY_SHADER);
+		glShaderSource(Geometry, 1, &GeometryShaderCode, NULL);
+		glCompileShader(Geometry);
+
+		glGetShaderiv(Geometry, GL_COMPILE_STATUS, &Success);
+		if (!Success)
+		{
+			glGetShaderInfoLog(Geometry, 512, NULL, InfoLog);
+			std::cout << "ERROR::SHADER::GEOMETRY::COMPILATION_FAILED\n" << InfoLog << std::endl;
+		}
+	}
+
 	// 3. Create the Shader Program
 	ProgramID = glCreateProgram();
 	glAttachShader(ProgramID, Vertex);
 	glAttachShader(ProgramID, Fragment);
+
+	if (HasGeometryShader)
+		glAttachShader(ProgramID, Geometry);
 
 	// 3.1 Link the Shader Program and output errors (if any)
 	glLinkProgram(ProgramID);
@@ -119,6 +158,9 @@ Shader::Shader(const char* VertexShaderPath, const char* FragmentShaderPath)
 	// 4. Delete Shaders
 	glDeleteShader(Vertex);
 	glDeleteShader(Fragment);
+
+	if (HasGeometryShader)
+		glDeleteShader(Geometry);
 }
 
 const void Shader::Use() 
@@ -144,6 +186,11 @@ void Shader::SetFloat(const std::string& Name, float Value) const
 void Shader::SetVec3(const std::string& Name, glm::vec3 Value) const
 {
 	glUniform3f(glGetUniformLocation(ProgramID, Name.c_str()), Value.x, Value.y, Value.z);
+}
+
+void Shader::SetVec4(const std::string& Name, glm::vec4 Value) const
+{
+	glUniform4f(glGetUniformLocation(ProgramID, Name.c_str()), Value.x, Value.y, Value.z, Value.z);
 }
 
 void Shader::SetMat4(const std::string& Name, glm::mat4 Value) const

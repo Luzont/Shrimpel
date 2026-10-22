@@ -53,13 +53,12 @@ layout (std430, binding = 1) buffer SpotLightBlock
 
 out vec4 FragColor;
 
-in vec2 TextureCoordinate;
-in vec3 Normal;
-in vec3 FragPos;
-in vec4 FragPosLightSpace;
-
-float NearPlane = 0.001;
-float FarPlane = 100000;
+in VS_OUT {
+	vec3 FragPos;
+	vec3 Normal;
+	vec2 TextureCoordinate;
+	vec4 FragPosLightSpace;
+} fs_in;
 
 uniform int NumberOfPointLights;
 uniform int NumberOfSpotLights;
@@ -68,7 +67,23 @@ uniform Material material;
 uniform DirectionalLight directionalLight;
 uniform vec3 ViewPosition;
 
+uniform float PointLightFarPlane;
+
 uniform sampler2D ShadowMap;
+uniform samplerCube ShadowCubeMap;
+
+vec3 Color = vec3(texture(material.Diffuse, fs_in.TextureCoordinate));
+float NearPlane = 0.001;
+float FarPlane = 100;
+
+vec3 SampleOffsetDirections[20] = vec3[]
+(
+   vec3( 1,  1,  1), vec3( 1, -1,  1), vec3(-1, -1,  1), vec3(-1,  1,  1), 
+   vec3( 1,  1, -1), vec3( 1, -1, -1), vec3(-1, -1, -1), vec3(-1,  1, -1),
+   vec3( 1,  1,  0), vec3( 1, -1,  0), vec3(-1, -1,  0), vec3(-1,  1,  0),
+   vec3( 1,  0,  1), vec3(-1,  0,  1), vec3( 1,  0, -1), vec3(-1,  0, -1),
+   vec3( 0,  1,  1), vec3( 0, -1,  1), vec3( 0, -1, -1), vec3( 0,  1, -1)
+);   
 
 float LinearizeDepth(float Depth)
 {
@@ -85,7 +100,7 @@ float CalculateDirectionalShadow(DirectionalLight light, vec4 fragPosLightSpace)
 	if (ProjectionCoordinate.z > 1.0)
 		return 0.0;
 
-	float Bias = max(0.05 * (1.0 - dot(Normal, LightDirection)), 0.005);
+	float Bias = max(0.05 * (1.0 - dot(fs_in.Normal, LightDirection)), 0.005);
 	float ClosestDepth = texture(ShadowMap, ProjectionCoordinate.xy).r;
 	float CurrentDepth = ProjectionCoordinate.z;
 	float Shadow = 0;
@@ -105,6 +120,29 @@ float CalculateDirectionalShadow(DirectionalLight light, vec4 fragPosLightSpace)
 	return Shadow;
 }
 
+float CalculatePointShadow(PointLight light, vec3 fragPos)
+{
+	vec3 FragToLight = fragPos - light.Position;
+	float CurrentDepth = length(FragToLight);
+    float Shadow = 0.0;
+	float Bias = 0.15;
+	int Samples = 40;
+	float ViewDistance = length(ViewPosition - fragPos);
+	float DiskRadius = 0.05;
+	
+	for (int i = 0; i < Samples; ++i)
+	{
+		float ClosestDepth = texture(ShadowCubeMap, FragToLight + SampleOffsetDirections[i] * DiskRadius).r * FarPlane;
+
+		if (CurrentDepth - Bias > ClosestDepth)
+			Shadow += 1.0;
+	}
+
+	Shadow /= float(Samples);
+
+	return Shadow;
+}
+
 vec3 CalculateDirectionalLight(DirectionalLight light, vec3 Normal, vec3 ViewDirection, float Shadow)
 {
 	vec3 LightDirection = normalize(-light.Direction);
@@ -112,14 +150,15 @@ vec3 CalculateDirectionalLight(DirectionalLight light, vec3 Normal, vec3 ViewDir
 	vec3 HalfwayDirection = normalize(LightDirection + ViewDirection);
 	float Spec = pow(max(dot(Normal, HalfwayDirection), 0.0), material.Shininess);
 
-	vec3 Ambient  = light.Ambient  * vec3(texture(material.Diffuse, TextureCoordinate));
-	vec3 Diffuse  = light.Diffuse  * Diff * vec3(texture(material.Diffuse, TextureCoordinate));
-	vec3 Specular = light.Specular * Spec * vec3(texture(material.Specular, TextureCoordinate));
+	vec3 Ambient = light.Ambient;
+	vec3 Diffuse = light.Diffuse * Diff;
+	vec3 Specular = light.Specular * Spec;
 
-	return Ambient + (1.0 - Shadow) * (Diffuse + Specular);
+	vec3 Result = (Ambient + (1.0 - Shadow) * (Diffuse + Specular)) * Color;
+	return Result;
 }
 
-vec3 CalculatePointLight(PointLight light, vec3 Normal, vec3 FragmentPosition, vec3 ViewDirection)
+vec3 CalculatePointLight(PointLight light, vec3 Normal, vec3 FragmentPosition, vec3 ViewDirection, float Shadow)
 {
 	vec3 LightDirection = normalize(light.Position - FragmentPosition);
 	vec3 HalfwayDirection = normalize(LightDirection + ViewDirection);
@@ -130,13 +169,15 @@ vec3 CalculatePointLight(PointLight light, vec3 Normal, vec3 FragmentPosition, v
 	float Distance = length(light.Position - FragmentPosition);
 	float Attenuation = 1.0 / (light.Constant + light.Linear * Distance + light.Quadratic * (Distance * Distance));
 
-	vec3 Ambient = light.Ambient * vec3(texture(material.Diffuse, TextureCoordinate));
-	vec3 Diffuse = light.Diffuse * Diff * vec3(texture(material.Diffuse, TextureCoordinate));
-	vec3 Specular = light.Specular * Spec * vec3(texture(material.Specular, TextureCoordinate));
+	vec3 Ambient = light.Ambient;
+	vec3 Diffuse = light.Diffuse * Diff;
+	vec3 Specular = light.Specular * Spec;
 	Ambient *= Attenuation;
 	Diffuse *= Attenuation;
 	Specular *= Attenuation;
-	vec3 Result = Ambient + Diffuse + Specular;
+
+	vec3 Result = (Ambient + (1.0 - Shadow) * (Diffuse + Specular)) * Color;
+
 	return Result;
 }
 
@@ -155,34 +196,37 @@ vec3 CalculateSpotLight(SpotLight light, vec3 Normal, vec3 FragmentPosition, vec
 	float Epsilon = light.Cutoff - light.OuterCutoff;
 	float Intesity = clamp((Theta - light.OuterCutoff) / Epsilon, 0.0, 1.0);
 
-	vec3 Ambient = light.Ambient * vec3(texture(material.Diffuse, TextureCoordinate));
-	vec3 Diffuse = light.Diffuse * Diff * vec3(texture(material.Diffuse, TextureCoordinate));
-	vec3 Specular = light.Specular * Spec * vec3(texture(material.Specular, TextureCoordinate));
+	vec3 Ambient = light.Ambient;
+	vec3 Diffuse = light.Diffuse * Diff;
+	vec3 Specular = light.Specular * Spec;
 	Ambient *= Attenuation;
 	Diffuse *= Attenuation * Intesity;
 	Specular *= Attenuation * Intesity;
-	vec3 Result = Ambient + Diffuse + Specular;
+	vec3 Result = (Ambient + Diffuse + Specular) * Color;
 	return Result;
 }
 
 void main()
 {
-	vec3 Norm = normalize(Normal);
-	vec3 ViewDirection = normalize(ViewPosition - FragPos);
-
-	// Shadows
-	float Shadow = CalculateDirectionalShadow(directionalLight, FragPosLightSpace);
+	Color = vec3(texture(material.Diffuse, fs_in.TextureCoordinate));
+	vec3 Norm = normalize(fs_in.Normal);
+	vec3 ViewDirection = normalize(ViewPosition - fs_in.FragPos);
+	vec3 Result = vec3(0.0, 0.0, 0.0);
 
 	// Directional light
-	vec3 Result = CalculateDirectionalLight(directionalLight, Norm, ViewDirection, Shadow);
+	//float DirectionalShadow = CalculateDirectionalShadow(directionalLight, fs_in.FragPosLightSpace);
+	//Result += CalculateDirectionalLight(directionalLight, Norm, ViewDirection, DirectionalShadow);
 
 	// Point lights
-	for (int i=0; i < NumberOfPointLights; i++)
-		Result += CalculatePointLight(PointLights[i], Norm, FragPos, ViewDirection);
+	for (int i = 0; i < NumberOfPointLights; i++)
+	{
+		float PointShadow = CalculatePointShadow(PointLights[i], fs_in.FragPos);
+		Result += CalculatePointLight(PointLights[i], Norm, fs_in.FragPos, ViewDirection, PointShadow);
+	}
 
 	// Spot lights
-	for (int i=0; i < NumberOfSpotLights; i++)
-		Result += CalculateSpotLight(SpotLights[i], Norm, FragPos, ViewDirection);
-
+	//for (int i=0; i < NumberOfSpotLights; i++)
+	//	Result += CalculateSpotLight(SpotLights[i], Norm, fs_in.FragPos, ViewDirection);
+	
 	FragColor = vec4(Result, 1.0);
 }

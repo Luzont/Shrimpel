@@ -12,6 +12,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
+#include <fbxsdk.h>
 #include <stb_image.h>
 #include "Shader.h"
 #include "Mesh.h"
